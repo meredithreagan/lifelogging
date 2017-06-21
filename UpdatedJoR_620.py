@@ -11,7 +11,7 @@ idPairs=[]
 listOfImagePairs=[]
 for i in range(0,len(ids1)):
     idPairs.append([ids1[i],ids2[i]])
-    listOfImagePairs.append({'stim':[filenames[ids1[i]-1],filenames[ids2[i]-1]], 'dur':3, "trial_num":i+1, "correct_resp":"J"})
+    listOfImagePairs.append({'stim':[filenames[ids1[i]-1],filenames[ids2[i]-1]], 'dur':6, "trial_num":i+1, "correct_resp":"J"})
 print idPairs
 print listOfImagePairs
 exp=Experiment()
