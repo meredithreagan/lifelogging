@@ -34,6 +34,7 @@ with Loop(listOfImagePairs) as trial:
                     base_time=rsplbl.appear_time['time'])
     Wait(config.ISI_DUR, jitter=config.ISI_JITTER)
 
+#log trial number, both images, the key response, RT, and correct response
     Log(name="jortask",
         trial_num=trial.current['trial_num'],
         img1=trial.current['stim'][0],
@@ -41,5 +42,5 @@ with Loop(listOfImagePairs) as trial:
         resp=ks.pressed,
         rt=ks.rt,
         correct=ks.correct)
-#log key choice, and image name
+
 exp.run()
