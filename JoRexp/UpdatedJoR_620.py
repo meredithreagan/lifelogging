@@ -1,12 +1,15 @@
 from smile.common import *
 import config
 
+#set up two lists of ids to create image pairs
 ids1=[1,2,3,4]
 ids2=[5,6,7,8]
 
+#read in the file containing the images
 with open("listofimages.txt") as f:
     filenames=f.read().splitlines()
-
+    
+#generating the list of image pairs
 idPairs=[]
 listOfImagePairs=[]
 for i in range(0,len(ids1)):
@@ -16,12 +19,14 @@ print idPairs
 print listOfImagePairs
 exp=Experiment()
 
+#beginning instructions
 Label(text="Press F for the left picture. Press J for the right picture. Press ENTER to begin.")
 with UntilDone():
     KeyPress(keys=['ENTER'])
 
 Wait(.5)
 
+#looping though all sets of image pairs
 with Loop(listOfImagePairs) as trial:
     Image(source=trial.current['stim'][0], duration=trial.current['dur'])
     Wait(config.BETWEEN_IMAGES_DUR)
