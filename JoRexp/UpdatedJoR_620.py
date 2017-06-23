@@ -22,7 +22,6 @@ with UntilDone():
 
 Wait(.5)
 
-
 with Loop(listOfImagePairs) as trial:
     Image(source=trial.current['stim'][0], duration=trial.current['dur'])
     Wait(config.BETWEEN_IMAGES_DUR)
