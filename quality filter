@@ -1,0 +1,33 @@
+
+import os.path
+import json
+
+
+jsonfilelist=[]
+for root, dirs, files in os.walk("/Users/meredithreagan/Documents/SMILE_MAIN/my_experiment/jsonfiles"):
+    for name in files:
+         if name.endswith((".json")):
+            jsonfilelist.append(name)
+
+usabledata=[]
+usable=[]
+
+
+for item in jsonfilelist:
+    with open(item) as data_file:
+        data=json.load(data_file)
+
+    sharpness=data["sharpness"]
+    entropy=data["entropy"]
+
+
+    if entropy>=5 and sharpness>=4:
+        gooditem=item
+
+        usable.append(gooditem)
+        usabledata.append(data)
+        
+
+usablepics=open("usablepics.txt","w")
+for item in usable:
+    usablepics.write("%s\n" % item)
