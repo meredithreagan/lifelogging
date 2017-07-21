@@ -184,6 +184,7 @@ def grab_same_day():
 bigTrying = True
 num_tries = 0
 while((bigTrying) & (num_tries < 10000)):
+    #this will need to point to the directory containing all of the photos for each subject
     data_dir = "/Users/meredithreagan/Documents/SMILE_MAIN/my_experiment/pics/*"
 
     gen = []
