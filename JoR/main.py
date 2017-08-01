@@ -59,7 +59,7 @@ with Loop(stimuli) as block:
             base=ks.base_time,
             rt=ks.rt,
             correct=ks.correct,
-            oddGapClass=trial.current['oddGapClass']
+            oddGapClass=trial.current['oddGapClass'],
             pulse_on=pp.pulse_on,
             pulse_off=pp.pulse_off)
 
