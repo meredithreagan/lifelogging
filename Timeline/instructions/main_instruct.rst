@@ -1,4 +1,4 @@
-﻿Welcome to the Experiment!
+Welcome to the Experiment!
 ==========================
 
 In this task you will be shown images from your own life.
@@ -22,7 +22,7 @@ You will only be able to click each line once, after which the next will
 appear. Please try to answer as quickly as possible.
 
 
-There will be 24 pairs in each block and 8 blocks total. At the end of each
+There will be 24 images in each block and 8 blocks total. At the end of each
 block you will have the opportunity to rest if you like.
 
 
