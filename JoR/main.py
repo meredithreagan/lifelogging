@@ -1,10 +1,16 @@
+
+"""
+main v2
+"""
+
 from smile.common import *
 from smile.pulse import Pulse
+
 import config
 import listgen
 
 
-stimuli = listgen.generateStimList()
+stimuli = listgen.generate_stim_list()
 
 
 exp=Experiment()
@@ -59,7 +65,7 @@ with Loop(stimuli) as block:
             base=ks.base_time,
             rt=ks.rt,
             correct=ks.correct,
-            oddGapClass=trial.current['oddGapClass'],
+            listgen_type=trial.current['listgen_type'],
             pulse_on=pp.pulse_on,
             pulse_off=pp.pulse_off)
 
