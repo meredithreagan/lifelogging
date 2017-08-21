@@ -3,14 +3,22 @@
 main v2
 """
 
+import sys
+
 from smile.common import *
 from smile.pulse import Pulse
 
 import config
 import listgen
 
-
+# Generate the stimuli.
 stimuli = listgen.generate_stim_list()
+
+# Query experimenter whether to continue based on listgen output.
+keep_going = input('Stimulus list generated. Continue? y/n: ')
+if keep_going != 'y':
+    sys.exit()
+
 
 
 exp=Experiment()
