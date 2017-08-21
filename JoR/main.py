@@ -15,7 +15,7 @@ import listgen
 stimuli = listgen.generate_stim_list()
 
 # Query experimenter whether to continue based on listgen output.
-keep_going = input('Stimulus list generated. Continue? y/n: ')
+keep_going = raw_input('Stimulus list generated. Continue? y/n: ')
 if keep_going != 'y':
     sys.exit()
 
