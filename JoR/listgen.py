@@ -17,23 +17,25 @@ def generate_stim_list(num_blocks=4, len_blocks=24, data_dir="images/*"):
     # For each subdirectory (representing a day of collection), add a dictionary
     # containing a list of images for each half-day.
     day_dicts = []
-    for x in glob.glob(data_dir):
+    for x in sorted(glob.glob(data_dir)):
         paths_m = glob.glob(x+"/morning/*")
         paths_a = glob.glob(x+"/afternoon/*")
         day_dicts.append({'morning': paths_m, 'afternoon': paths_a})
 
     # Shuffle images within each half-day.
     for day_dict in day_dicts:
+        print ' '
+        print day_dict
         random.shuffle(day_dict['morning'])
         random.shuffle(day_dict['afternoon'])
 
     # Assemble the stimuli lists.
     stimuli = []
     stimuli = stimuli + grab_days(day_dicts, 'same-day')
-    stimuli = stimuli + grab_days(day_dicts, 'different-day', 7, 7) + \
-                        grab_days(day_dicts, 'different-day', 1, 2) + \
+    stimuli = stimuli + grab_days(day_dicts, 'different-day', 1, 2) + \
                         grab_days(day_dicts, 'different-day', 4, 6) + \
                         grab_days(day_dicts, 'different-day', 8, 12) + \
+                        grab_days(day_dicts, 'different-day', 7, 7) + \
                         grab_days(day_dicts, 'odd')
 
 
@@ -185,16 +187,24 @@ def grab_days(day_dicts, type_, gapRangeStart=None, gapRangeEnd=None):
                 # Decide whether to subtract or add the gap to get the second
                 # index, based on which is possible. If both are possible,
                 # choose randomly.
-                if (index1 - gap < 0) & (index1 + gap <= len(day_dicts) - 1):
-                    index2 = index1 + gap
-                elif (index1 + gap > len(day_dicts) - 1) & (index1 - gap >= 0):
-                    index2 = index1 - gap
-                elif (index1 - gap >= 0) & (index1 + gap <= len(day_dicts) - 1):
+                if (index1 - gap >= 0) & (index1 + gap <= len(day_dicts) - 1):
                     coin = random.randint(0, 1)
                     if coin == 0:
                         index2 = index1 + gap
                     elif coin == 1:
                         index2 = index1 - gap
+                else:
+                    coin = random.randint(0, 1)
+                    if coin == 0:
+                        if (index1 - gap < 0) & (index1 + gap <= len(day_dicts) - 1):
+                            index2 = index1 + gap
+                        elif (index1 + gap > len(day_dicts) - 1) & (index1 - gap >= 0):
+                            index2 = index1 - gap
+                    elif coin == 1:
+                        if (index1 + gap > len(day_dicts) - 1) & (index1 - gap >= 0):
+                            index2 = index1 - gap
+                        elif (index1 - gap < 0) & (index1 + gap <= len(day_dicts) - 1):
+                            index2 = index1 + gap
             # If type is odd, pick random (but distinct) second index.
             elif type_ == 'odd':
                 index2 = random.randint(0, len(day_dicts) - 1)
@@ -304,7 +314,7 @@ def grab_days(day_dicts, type_, gapRangeStart=None, gapRangeEnd=None):
 
                     first_info = AB_info['B']
                     second_info = AB_info['A']
-
+                print gap, first_info[1], second_info[1], index1, index2
 
                 # Create the dictionary for this stimulus and append it to list.
                 new_dict = {
