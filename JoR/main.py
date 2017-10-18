@@ -1,7 +1,7 @@
 
 
 """
-main v3
+main v4
 """
 
 import sys
@@ -13,7 +13,12 @@ import config
 import listgen
 
 # Generate the stimuli.
-stimuli = listgen.generate_stim_list()
+stimuli = listgen.Listgen().generate()
+stim_0 = stimuli[:21]
+stim_1 = stimuli[21:42]
+stim_2 = stimuli[42:63]
+stim_3 = stimuli[63:]
+stim_list = [stim_0, stim_1, stim_2, stim_3]
 
 # Query experimenter whether to continue based on listgen output.
 keep_going = raw_input('Stimulus list generated. Continue? y/n: ')
@@ -33,7 +38,7 @@ with UntilDone():
 Wait(.5)
 
 #looping though all sets of image pairs
-with Loop(stimuli) as block:
+with Loop(stim_list) as block:
 
     with Loop(block.current) as trial:
 
@@ -41,7 +46,6 @@ with Loop(stimuli) as block:
 
         Wait(config.ISI_DUR, jitter=config.ISI_JITTER)
 
-        #Label(text=trial.current['godModeLabel'], duration=2) ### Only for debugging!
         Image(source=trial.current['first_pres'], duration=config.STIM_DUR,
               size_hint_y=None, height=500)
 
@@ -57,24 +61,25 @@ with Loop(stimuli) as block:
         with UntilDone():
             Wait(until=rsplbl.appear_time)
             ks=KeyPress(keys=config.RESP_KEYS, duration=config.RESP_DUR,
-                        correct_resp=trial.current['correctKey'],
+                        correct_resp=trial.current['correct_key'],
                         base_time=rsplbl.appear_time['time'])
 
         #log trial number, both images, the key response, RT, and correct response
         Log(name="JoR",
-            block=trial.current['block'],
-            trial_inBlock=trial.current['trial_inBlock'],
-            trial_absolute=trial.current['trial_absolute'],
+            subject=exp.subject,
+            block=block.i,
+            trial_inBlock=trial.i,
             img1=trial.current['first_pres'],
             img2=trial.current['second_pres'],
             date1=trial.current['first_date'],
             date2=trial.current['second_date'],
+            order=trial.current['order'],
+            zulu_int=trial.current['zulu_int'],
             resp=ks.pressed,
             press=ks.press_time,
             base=ks.base_time,
             rt=ks.rt,
             correct=ks.correct,
-            listgen_type=trial.current['listgen_type'],
             pulse_on=pp.pulse_on,
             pulse_off=pp.pulse_off)
 

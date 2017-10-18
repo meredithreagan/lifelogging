@@ -1,26 +1,48 @@
 
+import pickle
+
 from smile.common import *
 from smile.pulse import Pulse
+
 import config
 from listgen import listgen
 
-# set up the stimuli
-stimuli = listgen()
 
-# length of the slider
-# PBS: Put this in config
-slider_width = 1320
 
-# get a new experiment instance
+# Information for picking up a run where it left off: ######################################################################################## REPLICATE
+continue_flag = False
+starting_block = 1
+starting_trial = 1
+
+
+# Get the stimulus list. ######################################################################################## REPLICATE
+if continue_flag == False:
+    # Create stimulus list and back it up to a pickle file.
+    stimuli = listgen()
+    with open('last_list.pkl', 'wb') as output:
+        pickle.dump(stimuli, output, pickle.HIGHEST_PROTOCOL)
+else:
+    # Load stimulus list from a pickle file.
+    with open('last_list.pkl', 'rb') as _input:
+        stimuli = pickle.load(_input)
+    # Truncate stimulus list based on specified starting block/trial.
+    stimuli = stimuli[starting_block-1:]
+    stimuli[starting_block-1] = stimuli[starting_block-1][starting_trial-1:]
+
+
+
+# Create new experiment instance.
 exp = Experiment()
 
-# SHOW MAIN INSTRUCTIONS
+# Show main instructions.
 RstDocument(text=config.MAIN_INSTRUCTIONS, width=exp.screen.width*2/3,
             height=exp.screen.height, base_font_size=config.RST_FONT_SIZE)
 with UntilDone():
     KeyPress(keys=['ENTER'])
 
 Wait(2)
+
+
 
 with Loop(stimuli) as block:
 
@@ -40,14 +62,14 @@ with Loop(stimuli) as block:
                 with Parallel():
 
                     MouseCursor()
-                    s1 = Slider(min=0, max=3, value=-100, width=slider_width, top=400, padding=0)
+                    s1 = Slider(min=0, max=3, value=-100, width=config.SLIDER_WIDTH, top=400, padding=0)
 
                     increments = [0, 1, 2, 3]
                     names = ['Week 1', 'Week 2', 'Week 3']
                     for increment in increments:
-                        Rectangle(color='white', top=375, width=2, height=50, center_x=s1.left+increment*(slider_width/3))
+                        Rectangle(color='white', top=375, width=2, height=50, center_x=s1.left+increment*(config.SLIDER_WIDTH/3))
                         if increment != max(increments):
-                            Label(text=names[increment], center_x=(s1.left)+slider_width/(6)+increment*slider_width/(3), top=340)
+                            Label(text=names[increment], center_x=(s1.left)+config.SLIDER_WIDTH/(6)+increment*config.SLIDER_WIDTH/(3), top=340)
 
                     mbs1=MouseButton(widget=s1)
 
@@ -56,16 +78,16 @@ with Loop(stimuli) as block:
                     s1.disabled = True
 
                     with Parallel():
-                        line1=Rectangle(color='red', top=350, width=slider_width, height=1, center_x=s1.center_x,)
+                        line1=Rectangle(color='red', top=350, width=config.SLIDER_WIDTH, height=1, center_x=s1.center_x,)
                         MouseCursor()
-                        s2 = Slider(min=0, max=7, value=-100, width=slider_width, top=300,padding=0)
+                        s2 = Slider(min=0, max=7, value=-100, width=config.SLIDER_WIDTH, top=300,padding=0)
 
                         increments = [0, 1, 2, 3, 4, 5, 6, 7]
                         names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
                         for increment in increments:
-                            Rectangle(color='white', top=275, width=2, height=50, center_x=s1.left+increment*((slider_width/7)*1.003))
+                            Rectangle(color='white', top=275, width=2, height=50, center_x=s1.left+increment*((config.SLIDER_WIDTH/7)*1.003))
                             if increment != max(increments):
-                                Label(text=names[increment], center_x=(s2.left)+slider_width/(14)+increment*slider_width/(7), top=240)
+                                Label(text=names[increment], center_x=(s2.left)+config.SLIDER_WIDTH/(14)+increment*config.SLIDER_WIDTH/(7), top=240)
 
                         mbs2=MouseButton(widget=s2)
 
@@ -74,15 +96,15 @@ with Loop(stimuli) as block:
                         s2.disabled = True
 
                         with Parallel():
-                            line2=Rectangle(color='red', top=250, width=slider_width, height=1, center_x=s2.center_x)
+                            line2=Rectangle(color='red', top=250, width=config.SLIDER_WIDTH, height=1, center_x=s2.center_x)
                             MouseCursor()
-                            s3 = Slider(min=0, max=24, value=-100, width=slider_width, top=200, padding=0)
+                            s3 = Slider(min=0, max=24, value=-100, width=config.SLIDER_WIDTH, top=200, padding=0)
 
                             increments = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
                             names = ['12a', '1a', '2a', '3a', '4a', '5a', '6a', '7a', '8a', '9a', '10a', '11a', '12p', '1p', '2p', '3p', '4p', '5p', '6p', '7p', '8p', '9p', '10p', '11p', '12a']
                             for increment in increments:
-                                Rectangle(color='white', top=175, width=2, height=50, center_x=s3.left+increment*(slider_width/24))
-                                Label(text=names[increment], center_x=(s3.left)+increment*slider_width/(24), top=120)
+                                Rectangle(color='white', top=175, width=2, height=50, center_x=s3.left+increment*(config.SLIDER_WIDTH/24))
+                                Label(text=names[increment], center_x=(s3.left)+increment*config.SLIDER_WIDTH/(24), top=120)
 
                             mbs3=MouseButton(widget=s3)
 
@@ -91,9 +113,9 @@ with Loop(stimuli) as block:
                             s3.disabled = True
 
                             with Parallel():
-                                line3=Rectangle(color='red', top=150, width=slider_width, height=1, center_x=s3.center_x)
+                                line3=Rectangle(color='red', top=150, width=config.SLIDER_WIDTH, height=1, center_x=s3.center_x)
                                 MouseCursor()
-                                s4 = Slider(min=0, max=10, value=-100, width=slider_width, top=100, padding=0)
+                                s4 = Slider(min=0, max=10, value=-100, width=config.SLIDER_WIDTH, top=100, padding=0)
                                 #conf0=Rectangle(color='white', top=75, width=2, height=50, center_x=s4.left+100)
                                 #conf1=Rectangle(color="white", top=75, width=2, height=50, center_x=s4.right-100)
                                 lblvconf = Label(text="<--- Not at all confident", center_x=s4.left+100, top=40)

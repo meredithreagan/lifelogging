@@ -1,357 +1,337 @@
 
 """
-Listgen v2
+Listgen v4
 """
 
-
-import random
-import glob
+# %%
+import os
+import numpy as np
+import pandas as pd
 import itertools as it
-from datetime import datetime
+from glob import glob
+import random
+import copy
+import pickle
+from datetime import datetime, timedelta
+from dateutil import tz
 
+# %%
 
-def generate_stim_list(num_blocks=4, len_blocks=24, data_dir="images/*"):
-    # Generates a list of dictionaries, each of which contains the info for
-    # one stimulus (image pair), organized into blocks.
+class Listgen:
+    def __init__(self):
+        subject = 'sub'
+        #path = path to folder containing folders of different subjects
+        path = os.getcwd() + '/images/*'
+        days = glob(path)  # list of days for each subject
+        self.gen = [] # list containing a dictionary for every day
+        frame_list = []
 
-    # For each subdirectory (representing a day of collection), add a dictionary
-    # containing a list of images for each half-day.
-    day_dicts = []
-    for x in sorted(glob.glob(data_dir)):
-        paths_m = glob.glob(x+"/morning/*")
-        paths_a = glob.glob(x+"/afternoon/*")
-        day_dicts.append({'morning': paths_m, 'afternoon': paths_a})
+        for day in days:
+            x = glob(day+'/morning/*')  #list of morning images
+            y = glob(day+'/afternoon/*')  #list of afternoon images
+            # setting 'day' key = 0 for now
+            for pic in x:
+                frame_list.append(
+                    {'subject': subject,
+                     'time': 'morning',
+                     'path': pic,
+                     'used': False}
+                )
+            for pic in y:
+                frame_list.append(
+                    {'subject': subject,
+                     'time': 'afternoon',
+                     'path': pic,
+                     'used': False}
+                )
+        # create a DataFrame in which every row is one image
+        self.frame = pd.DataFrame(frame_list)
+        '''Use this if you already have the pickle file
+        with open('self_frame008.pickle', 'rb') as f:
+            frame = pickle.load(f)
+        self.frame = pd.DataFrame(frame)'''
 
-    # Shuffle images within each half-day.
-    for day_dict in day_dicts:
-        print ' '
-        print day_dict
-        random.shuffle(day_dict['morning'])
-        random.shuffle(day_dict['afternoon'])
+        self.list_of_days = []
+        # converting zulu time to EST
+        self.frame['zulu'] = 0    # create column of filler values
+        self.frame['zulu_int'] = 0
+        #self.frame['est'] = 0
+        self.frame['date'] = 0
+        self.frame['used'] = False
+        for index, row in self.frame.iterrows():
+            first = row['path']
+            x = first.split('Z')
+            self.frame.loc[index,'zulu'] = x[0][-14:]
+            self.frame.loc[index,'zulu_int'] = int(x[0][-14:])
+            est = self.convert_to_est(x[0][-14:],'UTC','%Y%m%d%H%M%S')
+            self.frame.loc[index,'date'] = est.date()
+            if est.date() not in self.list_of_days:
+                self.list_of_days.append(est.date())
 
-    # Assemble the stimuli lists.
-    stimuli = []
-    stimuli = stimuli + grab_days(day_dicts, 'same-day')
-    stimuli = stimuli + grab_days(day_dicts, 'different-day', 1, 2) + \
-                        grab_days(day_dicts, 'different-day', 4, 6) + \
-                        grab_days(day_dicts, 'different-day', 8, 12) + \
-                        grab_days(day_dicts, 'different-day', 7, 7) + \
-                        grab_days(day_dicts, 'odd')
+        # sort the reference frame so that the indices are in chronological
+        # order
+        self.frame.sort_values('zulu_int')
 
+        # save reference frame
+        fl = pd.DataFrame.to_dict(self.frame)
+        with open('self_frame.pickle', 'wb') as f:
+            pickle.dump(fl, f, pickle.HIGHEST_PROTOCOL)
 
-    # Qualify the lists to verify balance.
+        # conditions: time ranges between images in pairs
+        self.conditions = [[0,0], [1,1], [2,3], [4,6],
+                      [7,7], [8,12], [13,18]]
+        num_conditions = len(self.conditions)
+        time_day_combos = 3 # morningxmorn, afternoonxaft, mornxaft
+        pair_balancing = 2
+        #self.loop_range = ((self.number_of_images/pair_balancing)/2)/num_conditions
+        self.loop_range = 6
 
-    counter_subDay_mm = 0
-    counter_subDay_ma = 0
-    counter_subDay_aa = 0
-    counter_subDay_am = 0
-    counter_multiDay_mm = 0
-    counter_multiDay_ma = 0
-    counter_multiDay_aa = 0
-    counter_multiDay_am = 0
-    for i in range(len(stimuli)):
-        stim = stimuli[i]
+    def convert_to_est(self, datetime_, starting_timezone, date_format):
+        # Timezone converter, since Unforgettable.me datetimes are in Zulu time.
+        # Timezones:
+        from_zone = tz.gettz(starting_timezone)
+        to_zone = tz.gettz('America/New_York')
+        # utc = datetime.utcnow()
+        utc = datetime.strptime(datetime_, date_format)
+        # Tell the datetime object that it's in UTC time zone since
+        # datetime objects are 'naive' by default
+        utc = utc.replace(tzinfo=from_zone)
+        # Convert time zone.
+        eastern = utc.astimezone(to_zone)
+        return eastern
 
-        if stim['gap'] in range(1, 3):
-            gapClass = '1to2'
-        if stim['gap'] in range(4, 7):
-            gapClass = '4to6'
-        if stim['gap'] in range(8, 13):
-            gapClass = '8to12'
-        if stim['gap'] == 0:
-            gapClass = 'LessThan1'
-        if stim['gap'] == 7:
-            gapClass = '7'
+    def pair_selector(self, condition):
+        # first check to see if any images are available for the
+        #   condition in question
+        day_l = self.list_of_days
+        random.shuffle(day_l)
+        # create a key to determine if we succeeded in finding another
+        #   day that contains unused images
+        day_mod = 'none'
+        new_date = 'none'
+        for day in day_l:
+            if sum(condition) == 0:
+                if len(self.day_frame[(self.day_frame.date==(day))&
+                             (self.day_frame.used!=True)]) < 2 and new_date == 'none':
+                    break
+                else:
+                    new_date = day
+                    day_mod = day
+                    break
+            elif sum(condition) != 0:
+                if len(self.day_frame[(self.day_frame.date==(day))&
+                                 (self.day_frame.used!=True)]) == 0 and new_date == 'none':
+                    continue
+                elif len(self.day_frame[(self.day_frame.date==(day))&
+                                 (self.day_frame.used!=True)]) != 0 and new_date == 'none':
+                    # create a list of values based upon the condition that will
+                    #   determine how far forward or backward we pick another day
+                    time_skip = []
+                    for i in range(condition[0],condition[1]+1):
+                        time_skip.append(i)
+                        time_skip.append(i*-1)
+                    random.shuffle(time_skip)
+                    # now loop through the list
+                    ts_flag = False
+                    for ts in time_skip:
+                        if ts_flag == False:
+                            next_day = timedelta(days=ts) + day
+                            if len(self.day_frame[(self.day_frame.date==(next_day))&
+                                             (self.day_frame.used!=True)]) != 0:
+                                new_date = next_day
+                                ts_flag = True
+                                day_mod = day
+                            else:
+                                print 'time_skip',ts
+                        else:
+                            break
+            elif new_date != 'none':
+                break
+        # now we pick the pair of images, if possible. Otherwise we pick
+        #   a different day
+        if new_date == 'none':
+            pair = ['null']
+            return pair
+        else:
+            # get indices of images for first part of condition
+            day_0_inds = self.day_frame[(self.day_frame.date==day_mod)&
+                             (self.day_frame.used!=True)].index.values.tolist()
+            # pick random image from list of day_frame indices
+            image_0 = random.choice(day_0_inds)
+            # mark this image as used from the day_frame
+            self.day_frame.loc[image_0,'used'] = True
 
-        daysClass = stim['halfDays']
-        if gapClass == 'LessThan1':
-            if daysClass == 'morning-morning':
-                counter_subDay_mm += 1
-            if daysClass == 'morning-afternoon':
-                counter_subDay_ma += 1
-            if daysClass == 'afternoon-afternoon':
-                counter_subDay_aa += 1
-            if daysClass == 'afternoon-morning':
-                counter_subDay_am += 1
-        elif gapClass != 'LessThan1':
-            if daysClass == 'morning-morning':
-                counter_multiDay_mm += 1
-            if daysClass == 'morning-afternoon':
-                counter_multiDay_ma += 1
-            if daysClass == 'afternoon-afternoon':
-                counter_multiDay_aa += 1
-            if daysClass == 'afternoon-morning':
-                counter_multiDay_am += 1
+            # get indices of images for second part of condition
+            day_1_inds = self.day_frame[(self.day_frame.date==new_date)&
+                             (self.day_frame.used!=True)].index.values.tolist()
+            # pick random image from list of day_frame indices
+            image_1 = random.choice(day_1_inds)
+            # mark these images as used from the day_frame
+            self.day_frame.loc[image_1,'used'] = True
+            # now return the pair always in chronological order. This is
+            #   balanced later
+            Img0 = self.day_frame['zulu_int'][image_0]
+            Img1 = self.day_frame['zulu_int'][image_1]
+            if Img0 < Img1:
+                img_pair = [self.day_frame['path'][image_0],
+                            self.day_frame['path'][image_1]]
+                time_in_day = [self.day_frame['time'][image_0],
+                               self.day_frame['time'][image_1]]
+                zulu_time = [self.day_frame['zulu_int'][image_0],
+                               self.day_frame['zulu_int'][image_1]]
+                dates = [self.day_frame['date'][image_0],
+                               self.day_frame['date'][image_1]]
+                correct_key = 'J'
+            elif Img1 < Img0:
+                img_pair = [self.day_frame['path'][image_1],
+                            self.day_frame['path'][image_0]]
+                time_in_day = [self.day_frame['time'][image_1],
+                               self.day_frame['time'][image_0]]
+                zulu_time = [self.day_frame['zulu_int'][image_1],
+                               self.day_frame['zulu_int'][image_0]]
+                dates = [self.day_frame['date'][image_1],
+                               self.day_frame['date'][image_0]]
+                correct_key = 'F'
 
-    print '---------------------'
-    print 'sub-day mm:', counter_subDay_mm
-    print 'sub-day ma:', counter_subDay_ma
-    print 'sub-day aa:', counter_subDay_aa
-    print 'sub-day am:', counter_subDay_am
-    print 'different-day mm:', counter_multiDay_mm
-    print 'different-day ma:', counter_multiDay_ma
-    print 'different-day aa:', counter_multiDay_aa
-    print 'different-day am:', counter_multiDay_am
+            pair = {'pair': img_pair,
+                    'condition': condition,
+                    'time': time_in_day,
+                    'first_pres': img_pair[0],
+                    'second_pres': img_pair[1],
+                    'dates': dates,
+                    'first_date': dates[0],
+                    'second_date': dates[1],
+                    'zulu_int': zulu_time,
+                    'correct_key': correct_key,
+                    'order': 'forward'}
+            return pair
 
-    random.shuffle(stimuli)
-    allBlocks = []
-    trialCounter = 0
-    for i in range(num_blocks):
-        block = []
-        for j in range(len_blocks):
-            if len(stimuli) == 0:
-                print 'RAN OUT OF STIMS'
+    def generate(self):
+        # attempt to get a full list 1000 times
+        break_point = False
+        for attempt in range(1000):
+            if break_point == False:
+                print 'attempt', attempt
+                self.day_frame = copy.deepcopy(self.frame)
+                self.stimuli_list = []  # list to which we will append pairs
+                for i in range(self.loop_range):
+                    conditions = self.conditions
+                    random.shuffle(conditions)
+                    for condition in conditions:
+                        pairs = []
+                        for pair_number in range(2):
+                            pair = self.pair_selector(condition)
+                            if pair == ['null']:
+                                continue
+                            else:
+                                #reverse order of second pair
+                                if pair_number == 1:
+                                    pair['pair'].reverse()
+                                    pair['time'].reverse()
+                                    pair['zulu_int'].reverse()
+                                    pair['dates'].reverse()
+                                    pair['order'] = 'reverse'
+                                else:
+                                    pass
+                                pairs.append(pair)
+                        if len(pairs) < 2:
+                            # mark image as unused so that it can be used again
+                            if len(pairs) == 0:
+                                continue
+                            else:
+                                # Restore images in pair to being unused
+                                pic_path_0 = pairs[0]['pair'][0]
+                                pic_path_1 = pairs[0]['pair'][1]
+                                x = self.day_frame.index[self.day_frame['path'] == pic_path_0].tolist()
+                                self.day_frame.loc[x[0],'used'] = False
+                                y = self.day_frame.index[self.day_frame['path'] == pic_path_1].tolist()
+                                self.day_frame.loc[y[0],'used'] = False
+                        else:
+                            for pair in pairs:
+                                self.stimuli_list.append(pair)
+                            if len(self.stimuli_list) == 84:
+                                break_point = True
+
+        if len(self.stimuli_list) < 84:
+            print 'WARNING: Only {} pairs found'.format(str(len(self.stimuli_list)))
+            proceed = input('Proceed with current list? [y] or [n]')
+            if proceed == 'y':
+                with open('short_list.pickle', 'wb') as f:
+                    pickle.dump(self.stimuli_list, f, pickle.HIGHEST_PROTOCOL)
+                return self.stimuli_list
             else:
-                stim = stimuli.pop()
-                trialCounter += 1
-                stim.update({'block':i+1, 'trial_inBlock': j+1,
-                             'trial_absolute':trialCounter})
-                block.append(stim)
-        allBlocks.append(block)
-
-    # Return the stimulus dictionaries.
-    return allBlocks
+                print 'LISTGEN TERMINATED.'
+        else:
+            with open('stimuli.pickle', 'wb') as f:
+                pickle.dump(self.stimuli_list, f, pickle.HIGHEST_PROTOCOL)
+            print 'Success'
+            return self.stimuli_list
 
 
-def grab_days(day_dicts, type_, gapRangeStart=None, gapRangeEnd=None):
-    # Get a set of dictionaries for stimuli of a given between-image gap.
+# %%
+x = Listgen()
+x.generate()
 
-    # Set timeout setting.
-    timeout_tries = 1000000
+# %%
+'''
+To execute, change the line 16 `path` to the subject's folder containing
+the folders for each day
+________________________________________________________________________________
+Summary:
 
-    # If the gap-type is odd, construct a list of the day-dictionaries that
-    # remain to be pulled from, along with a length of that list (in half-days).
-    if type_ == 'odd':
-        leftovers = []
-        leftoverHalfDayLength = 0
-        for dayDict in day_dicts:
-            if not (
-                    (len(dayDict['morning']) == 0
-                    and len(dayDict['afternoon']) == 0)
-                    ):
-                leftovers.append(dayDict)
-            leftoverHalfDayLength += len(dayDict['morning'])
-            leftoverHalfDayLength += len(dayDict['afternoon'])
+The listgen operates by referencing a DataFrame called `self.frame`. Every row
+in this frame is one image with information about what day and what time of day
+the image came from, as well as the image's path. Currently, the listgen will
+make 1000 attempts to find a combination of image pairs that meet our criteria,
+being the following (listed by highest to lowest priority):
+1) Equal number of chronologically ordered and reversed pairs of images
+2) TRY to get an equal number of pairs for each time range.
+        NOTE: Currently, in the event that the listgen cannot find any suitable
+        pairs for a time range, it will move on to another condition that works.
+        It will keep making pairs untilthe specified number of pairs has been
+        made.
+The listgen currently does NOT make any attempt to balance the number of
+morningxmorning, afternoonxafternoon, and morningxafternoon pairs.  This can be
+added in later, if necessary, but will likely result in many failures, as issues
+will arise do to participants having varying amounts of images on each day and
+for each time of day.
 
-    # Set starting values for method constructs.
-    stimuli = []
-    order_counter = [0, 0, 0, 0]
-    timeout_counter = 0
+The listgen makes a deep copy of `self.frame` called `self.day_frame` at the
+onset of every attempt.  This is critical for making sure that every attempt has
+a blank slate.  It is important to note that the frame also contains a column
+called "used": Once an image is used, it's corresponding row in `self.day_frame`
+is changed from False to True, and it will not be used again.
 
-    # Run in blocks of 32 for same-day, 16 for different-day, and however long
-    # you can grab pairs for odd.
-    if type_ == 'same-day':
-        blockLength = 32
-    elif type_ == 'different-day':
-        blockLength = 16
-    elif type_ == 'odd':
-        blockLength = leftoverHalfDayLength/2
+This listgen works by first having a list of the different conditions in the
+form of pairs, such as [0,0] or [13,18]. These condition pairs represent the
+range of days in the condtion, so [0,0] would be a range of 0 days, meaning the
+selected pair of images must be from the same day.  The [13,18] means there is a
+range of + or - 13 to 18 days away from an image that is selected randomly. In
+practice, the listgen scrambles the list of condition ranges, selects a
+condition range, then scrambles the list of days. It will loop through every
+day, checking to see if that day has any unused images, then loop through a list
+of days that are within the specified time range both in the forward and
+backwards direction.  The second day that is chosen is randomly selected. In the
+event that a second day has unused images, the pair is selected. The listgen
+will find two pairs of images for each time range, with one of the pairs being
+chronologically forward and the other backwards. In the event that there is only
+one pair found for a condition, the listgen will NOT use that single pair and
+mark the pair that was selected back to being 'unused'. Then, the listgen will
+move on to a different condition.
 
-    for i in range(blockLength):
+In the event that 1000 attempts have been made and there is no list of stimuli
+with enough pairs, a warning will appear and a prompt will ask if you still want
+to save the file, with the file being called 'short_list.pickle' and return
+the stimuli_list.
 
-        # For same-day and different-day types, choose starting/ending half-days
-        # in repeat combos every 4 stimuli.
-        if type_ == 'same-day' or type_ == 'different-day':
-            half_day_assignments = {
-                                    0: ['morning', 'morning'],
-                                    1: ['morning', 'afternoon'],
-                                    2: ['afternoon', 'afternoon'],
-                                    3: ['afternoon', 'morning'],
-                                    }
-            half_day_A = half_day_assignments[i%4][0]
-            half_day_B = half_day_assignments[i%4][1]
-        # For odd type, choose starting/ending half-days randomly.
-        elif type_ == 'odd':
-            half_day_possibilities = ['morning', 'afternoon']
-            half_day_A = half_day_possibilities[random.randint(0, 1)]
-            half_day_B = half_day_possibilities[random.randint(0, 1)]
+Information about each pair isgathered as well, including each image's time of
+day. All this informaiton is saved in the form of a list of dictionaries within
+a pickle file. For analysis, run the following lines to load in the pickle file
+and interact with it as a DataFrame.
+----------
+with open('stimuli.pickle', 'rb') as f:
+    df = pickle.load(f)
+df = pd.DataFrame(df)
+----------
 
-        # Keep trying to pull a pair as long as you haven't reached the
-        # timeout limit and the method hasn't cleared you to proceed to the
-        # next stimulus.
-        stopFlag = False
-        while(stopFlag == False and timeout_counter < timeout_tries):
-
-            # Pick random index on first day.
-            index1 = random.randint(0, len(day_dicts) - 1)
-
-            # If type is same-day,
-            if type_ == 'same-day':
-                # Both days are based on the start index.
-                gap = 0
-                index2 = index1
-            # If type is different-day,
-            elif type_ == 'different-day':
-                # Pick a random gap distance within the gap range.
-                gap = random.randint(gapRangeStart, gapRangeEnd)
-                # Decide whether to subtract or add the gap to get the second
-                # index, based on which is possible. If both are possible,
-                # choose randomly.
-                if (index1 - gap >= 0) & (index1 + gap <= len(day_dicts) - 1):
-                    coin = random.randint(0, 1)
-                    if coin == 0:
-                        index2 = index1 + gap
-                    elif coin == 1:
-                        index2 = index1 - gap
-                else:
-                    coin = random.randint(0, 1)
-                    if coin == 0:
-                        if (index1 - gap < 0) & (index1 + gap <= len(day_dicts) - 1):
-                            index2 = index1 + gap
-                        elif (index1 + gap > len(day_dicts) - 1) & (index1 - gap >= 0):
-                            index2 = index1 - gap
-                    elif coin == 1:
-                        if (index1 + gap > len(day_dicts) - 1) & (index1 - gap >= 0):
-                            index2 = index1 - gap
-                        elif (index1 - gap < 0) & (index1 + gap <= len(day_dicts) - 1):
-                            index2 = index1 + gap
-            # If type is odd, pick random (but distinct) second index.
-            elif type_ == 'odd':
-                index2 = random.randint(0, len(day_dicts) - 1)
-                gap = abs(index1 - index2)
-
-            # Now use the indexes in random order to pick the days.
-            index_set_possibilities = [[index1, index2], [index2, index1]]
-            index_set = index_set_possibilities[random.randint(0, 1)]
-            daydict_A = day_dicts[index_set[0]]
-            daydict_B = day_dicts[index_set[1]]
-
-            # If there AREN'T enough images in the chosen directories, abort,
-            # increment the timeout counter and try again
-            if type_ == 'same-day':
-                minSize = 2
-            elif type_ == 'different-day':
-                minSize = 1
-            elif type_ == 'odd':
-                if index1 == index2:
-                    minSize = 2
-                else:
-                    minSize = 1
-            if not (
-                    (len(daydict_A[half_day_A]) >= minSize)
-                    & (len(daydict_B[half_day_B]) >= minSize)
-                    ):
-                timeout_counter += 1
-                if timeout_counter >= timeout_tries:
-                    print 'TIMED OUT!'
-
-            # Otherwise,
-            else:
-
-                # Pop out a start and an end image.
-                image_A_path = daydict_A[half_day_A].pop()
-                image_B_path = daydict_B[half_day_B].pop()
-
-                # Get the datetimes for comparison and for logs.
-                datetime_for_compare_A = datetime.strptime(image_A_path[
-                                                image_A_path.find("Z")-
-                                                14:image_A_path.find("Z")],
-                                                "%Y%m%d%H%M%S")
-                datetime_for_compare_B = datetime.strptime(image_B_path[
-                                                image_B_path.find("Z")-
-                                                14:image_B_path.find("Z")],
-                                                "%Y%m%d%H%M%S")
-                datetime_for_log_A = image_A_path[
-                                              image_A_path.find("Z")-
-                                              14:image_A_path.find("Z")-6]
-                datetime_for_log_B = image_B_path[
-                                              image_B_path.find("Z")-
-                                              14:image_B_path.find("Z")-6]
-
-
-                # Determine which image was actually more recent
-                if datetime_for_compare_A < datetime_for_compare_B:
-                    AB_in_forward_order = True
-                else:
-                    AB_in_forward_order = False
-
-                # Determine what the halfway point is for balancing morning/
-                # afternoon bins.
-                if type_ == 'same-day':
-                    halfwayPoint = 4
-                elif type_ == 'different-day':
-                    halfwayPoint = 2
-                elif type_ == 'odd':
-                    halfwayPoint = leftoverHalfDayLength/4
-
-                # Decide the order of display, so that half of the pairs are
-                # shown in correct order and half are shown in reverse
-                if order_counter[i%4] < halfwayPoint:
-                    order = "earlier_shown_first"
-                    correct = "second"
-                    slog_correct_key = 'J'
-                elif order_counter[i%4] >= halfwayPoint:
-                    order = "later_shown_first"
-                    correct = "first"
-                    slog_correct_key = 'F'
-
-                # Decide which image (A or B) is actually displayed first, based
-                # on the order-shown condition and the true order of the
-                # images in time.
-                AB_info = {
-                           'A': [image_A_path, datetime_for_log_A, half_day_A],
-                           'B': [image_B_path, datetime_for_log_B, half_day_B]
-                           }
-
-                if (
-                        (order == 'earlier_shown_first'
-                         and AB_in_forward_order == True)
-                        or
-                        (order == 'later_shown_first'
-                         and AB_in_forward_order == False)
-                        ):
-
-                    first_info = AB_info['A']
-                    second_info = AB_info['B']
-
-                elif (
-                          (order == 'later_shown_first'
-                           and AB_in_forward_order == True)
-                          or
-                          (order == 'earlier_shown_first'
-                           and AB_in_forward_order == False)
-                          ):
-
-                    first_info = AB_info['B']
-                    second_info = AB_info['A']
-                print gap, first_info[1], second_info[1], index1, index2
-
-                # Create the dictionary for this stimulus and append it to list.
-                new_dict = {
-                            "first_pres":first_info[0],
-                            "first_date":first_info[1],
-                            "first_halfDay":first_info[2],
-
-                            "second_pres":second_info[0],
-                            "second_date":second_info[1],
-                            "second_halfDay":second_info[2],
-
-                            "gap":gap,
-                            "halfDays":half_day_A+'-'+half_day_B,
-
-                            "order":order,
-                            'correct':correct,
-                            "correctKey":slog_correct_key,
-
-                            'listgen_type':type_,
-                            'godModeLabel':str(gap)+'-'+half_day_A+half_day_B,
-                            }
-                stimuli.append(new_dict)
-
-                # Increment the order-counter to maintain balanced design.
-                order_counter[i%4] = order_counter[i%4] + 1
-                # Set stopFlag to True to proceed to the next stim-pair.
-                stopFlag = True
-
-    # Report block info to the user.
-    print '-', type_, '-'
-    print 'stimuli length:', len(stimuli)
-    print 'order counter:', order_counter
-
-    # Return the stimuli.
-    return stimuli
-
-
-if __name__ == "__main__":
-
-    generate_stim_list()
+'''

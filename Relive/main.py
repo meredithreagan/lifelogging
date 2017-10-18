@@ -1,12 +1,36 @@
+
 from smile.common import *
 import config as Cg
 from genstim import gen_stimList
 import os
 
-imageList = os.listdir('images')
 
-runs = gen_stimList(imageList=imageList, num_blocks=6, len_blocks=32)
+# Information for picking up a run where it left off:
+continue_flag = False
+starting_block = 1
+starting_trial = 1
 
+
+# Get the stimulus list.
+if continue_flag == False:
+    # Create stimulus list and back it up to a pickle file.
+    imageList = os.listdir('images')
+
+    runs = gen_stimList(imageList=imageList, num_blocks=6, len_blocks=32)
+
+    with open('last_list.pkl', 'wb') as output:
+        pickle.dump(runs, output, pickle.HIGHEST_PROTOCOL)
+else:
+    # Load stimulus list from a pickle file.
+    with open('last_list.pkl', 'rb') as _input:
+        runs = pickle.load(_input)
+    # Truncate stimulus list based on specified starting block/trial.
+    runs = runs[starting_block-1:]
+    runs[starting_block-1] = runs[starting_block-1][starting_trial-1:]
+
+
+
+# Create the experiment instance
 exp = Experiment()
 
 Wait(1.0)
